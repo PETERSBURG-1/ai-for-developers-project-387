@@ -58,7 +58,8 @@ jobs:
           if [ "$attempts" -ge 3 ]; then
             sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
             run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            gh issue comment "$PR_NUMBER" --body "limit_exhausted: превышен лимит 3 запуска на PR. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              -f body="limit_exhausted: превышен лимит 3 запуска на PR. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
             echo "allowed=false" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=true" >> "$GITHUB_OUTPUT"
@@ -93,6 +94,7 @@ jobs:
       - name: Report outcome
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
           RESULT: ${{ needs.opencode.result }}
         run: |
@@ -104,4 +106,5 @@ jobs:
           fi
           sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          gh issue comment "$PR_NUMBER" --body "${reason}: запуск агента не завершился успешно. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -f body="${reason}: запуск агента не завершился успешно. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
