@@ -3,8 +3,6 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MOSCOW_TIME_ZONE_NOTE } from "@/lib/moscow-time";
-
 import { MeetingTypePage } from "./MeetingTypePage";
 import { routes } from "../routes";
 
@@ -64,7 +62,7 @@ function renderPage() {
   );
 }
 
-const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
+const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
 
 afterEach(cleanup);
 

@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { MOSCOW_TIME_ZONE, MOSCOW_TIME_ZONE_NOTE } from "../src/lib/moscow-time.ts";
+import { MOSCOW_TIME_ZONE } from "../src/lib/moscow-time.ts";
 
 const meetingTypeId = `e2e-${Date.now()}`;
 const meetingTypeTitle = "E2E встреча";
-const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
+const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
 const timeFormatter = new Intl.DateTimeFormat("ru-RU", {
   timeZone: MOSCOW_TIME_ZONE,
   hour: "2-digit",
@@ -31,9 +31,14 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   });
   expect(created.status()).toBe(201);
 
-  const availabilityResponse = await request.get(
-    `/api/meeting-types/${meetingTypeId}/availability`,
+  await page.goto("/book");
+  const availabilityResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/meeting-types/${meetingTypeId}/availability`) &&
+      response.request().method() === "GET",
   );
+  await page.locator(`a[href="/book/${meetingTypeId}"]`).click();
+  const availabilityResponse = await availabilityResponsePromise;
   expect(availabilityResponse.status()).toBe(200);
   const availability = (await availabilityResponse.json()) as {
     days: Array<{ slots: Array<{ start: string; available: boolean }> }>;
@@ -45,8 +50,6 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   const expectedTime = timeFormatter.format(new Date(chosenSlot.start));
   const expectedDateTime = dateTimeFormatter.format(new Date(chosenSlot.start));
 
-  await page.goto("/book");
-  await page.locator(`a[href="/book/${meetingTypeId}"]`).click();
   await expect(page.getByRole("heading", { name: meetingTypeTitle })).toBeVisible();
   await expect(page.getByText(timeZoneNote)).toHaveCount(1);
 

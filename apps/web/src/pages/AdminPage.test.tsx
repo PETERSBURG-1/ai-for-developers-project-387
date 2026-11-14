@@ -2,8 +2,6 @@ import { MemoryRouter } from "react-router";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MOSCOW_TIME_ZONE_NOTE } from "@/lib/moscow-time";
-
 import { AdminPage } from "./AdminPage";
 
 vi.mock("@calendar/api-client", async (importOriginal) => {
@@ -47,7 +45,7 @@ vi.mock("@calendar/api-client", async (importOriginal) => {
   };
 });
 
-const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
+const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
 
 afterEach(cleanup);
 

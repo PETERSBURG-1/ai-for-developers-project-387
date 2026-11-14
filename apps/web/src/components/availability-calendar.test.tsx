@@ -2,8 +2,6 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import type { Slot } from "@calendar/api-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MOSCOW_TIME_ZONE_NOTE } from "@/lib/moscow-time";
-
 import { AvailabilityCalendar } from "./availability-calendar";
 
 const days = [
@@ -25,7 +23,7 @@ const days = [
   },
 ];
 
-const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
+const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
 
 afterEach(cleanup);
 
