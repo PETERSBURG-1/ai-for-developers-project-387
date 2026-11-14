@@ -252,12 +252,38 @@ Playwright с включённым trace. Артефакт `playwright-<sha>` с
 Адрес приложения задаётся repository variable `APP_URL`; журнал аудита —
 `AUDIT_LOG_ISSUE` (issue #19). Сырой Lighthouse-отчёт сохраняется artifact
 `audit-report-<run_id>`, итог агента — отдельный
-`audit-output-<run_id>`; оба хранятся 30 дней. Агент анализирует
+`audit-output-<run_id>`; оба хранятся 30 дней в артефактах соответствующего
+запуска Actions и скачиваются со страницы run. Агент анализирует
 отчёт, ищет существующие задачи по маркеру `audit-key` в теле issues и создаёт
 новый issue только по новой находке. При отсутствии находок или дубле он
 пишет результат в журнал аудита. Учебная находка передаётся через
 `workflow_dispatch` inputs `demo_finding`/`demo_key`, помечается label
 `training` и не считается подтверждённым дефектом. `.audit/` исключён из Git.
+
+Ручные прогоны подтвердили сценарии:
+
+- реальный Lighthouse:
+  [run 43631586023](https://github.com/PETERSBURG-1/ai-for-developers-project-387/actions/runs/43631586023),
+  artifact `audit-report-43631586023`/`audit-output-43631586023`, создан issue #21;
+- учебный отчёт:
+  [run 43631876854](https://github.com/PETERSBURG-1/ai-for-developers-project-387/actions/runs/43631876854),
+  artifact `audit-report-43631876854`/`audit-output-43631876854`, создан учебный
+  issue #22 с label `training`;
+- повторный учебный запуск:
+  [run 43631987857](https://github.com/PETERSBURG-1/ai-for-developers-project-387/actions/runs/43631987857),
+  artifact `audit-report-43631987857`/`audit-output-43631987857`, дубль не создан,
+  результат записан в журнал #19.
+
+### Выводы аудита
+
+Прогоны показали, что адрес приложения и номер журнала нельзя зашивать в
+workflow: их вынесли в repository variables `APP_URL` и `AUDIT_LOG_ISSUE`.
+Для проверки создания задачи без реального дефекта добавили учебный отчёт
+(`demo_finding`/`demo_key`, label `training`). Чтобы повторный запуск не плодил
+дубли, находка получает стабильный `audit-key` в теле issue, а поиск идёт по
+маркеру. Публикацию вынесли в отдельный job с минимальными правами
+`issues: write`: агент только пишет `agent-output.json`, а issue и комментарии
+создаёт безопасный `publish`.
 
 ### Деплой
 
