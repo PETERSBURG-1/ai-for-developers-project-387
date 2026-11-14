@@ -1,0 +1,43 @@
+name: opencode
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  opencode:
+    if: |
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+      (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: opencode-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Expose project skills
+        run: |
+          mkdir -p .opencode
+          cp -R .agents/skills .opencode/skills
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/deepseek-v4.1-flash
+          mentions: /oc,/opencode
+          share: "false"
