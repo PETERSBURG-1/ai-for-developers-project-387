@@ -251,8 +251,8 @@ Playwright с включённым trace. Артефакт `playwright-<sha>` с
 
 Адрес приложения задаётся repository variable `APP_URL`; журнал аудита —
 `AUDIT_LOG_ISSUE` (issue #19). Сырой Lighthouse-отчёт сохраняется artifact
-`audit-report-<run_id>-<run_attempt>`, итог агента — отдельный
-`audit-output-<run_id>-<run_attempt>`; оба хранятся 30 дней. Агент анализирует
+`audit-report-<run_id>`, итог агента — отдельный
+`audit-output-<run_id>`; оба хранятся 30 дней. Агент анализирует
 отчёт, ищет существующие задачи по маркеру `audit-key` в теле issues и создаёт
 новый issue только по новой находке. При отсутствии находок или дубле он
 пишет результат в журнал аудита. Учебная находка передаётся через

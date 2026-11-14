@@ -51,9 +51,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: audit-report-${{ github.run_id }}-${{ github.run_attempt }}
+          name: audit-report-${{ github.run_id }}
           path: .audit
           if-no-files-found: warn
+          overwrite: true
           retention-days: 30
 
   audit:
@@ -73,7 +74,7 @@ jobs:
       - name: Download audit report
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: audit-report-${{ github.run_id }}-${{ github.run_attempt }}
+          name: audit-report-${{ github.run_id }}
           path: .audit
 
       - name: Expose project skills
@@ -90,7 +91,7 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
           AUDIT_LOG_ISSUE: ${{ vars.AUDIT_LOG_ISSUE }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          ARTIFACT_NAME: audit-report-${{ github.run_id }}-${{ github.run_attempt }}
+          ARTIFACT_NAME: audit-report-${{ github.run_id }}
           DEMO_FINDING: ${{ inputs.demo_finding }}
           DEMO_KEY: ${{ inputs.demo_key }}
         with:
@@ -102,7 +103,7 @@ jobs:
             Исходные данные:
             - приложение: ${{ vars.APP_URL }}
             - run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            - artifact отчёта: audit-report-${{ github.run_id }}-${{ github.run_attempt }} (30 дней)
+            - artifact отчёта: audit-report-${{ github.run_id }} (30 дней)
             - журнал аудита: issue #${{ vars.AUDIT_LOG_ISSUE }}
             - учебная находка: ${{ inputs.demo_finding }}
             - ключ учебной находки: ${{ inputs.demo_key }}
@@ -141,9 +142,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: audit-output-${{ github.run_id }}-${{ github.run_attempt }}
+          name: audit-output-${{ github.run_id }}
           path: .audit/agent-output.md
           if-no-files-found: warn
+          overwrite: true
           retention-days: 30
 
   report:
