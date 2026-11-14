@@ -186,6 +186,11 @@ GitHub Secrets под именем `OPENCODE_API_KEY`.
 Для запуска добавьте ключ OpenCode в Settings → Secrets and variables → Actions
 под именем `OPENCODE_API_KEY` и установите приложение на репозиторий.
 
+### Проверка
+
+Создайте issue и отправьте комментарий `/oc explain this issue`; ответ появится
+комментарием в issue, прогон — в Actions workflow `opencode`.
+
 ### Деплой
 
 Проектная конфигурация MCP находится в `opencode.json`: сервер Railway
