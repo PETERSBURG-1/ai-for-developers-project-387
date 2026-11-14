@@ -52,8 +52,12 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
 
   await expect(page.getByRole("heading", { name: meetingTypeTitle })).toBeVisible();
   await expect(page.getByText(timeZoneNote)).toHaveCount(1);
+  await expect(page.getByRole("button").filter({ hasText: timeZoneNote })).toHaveCount(0);
 
   await page.locator('ul[aria-label="Дни"] button').nth(1).click();
+  await expect(page.getByText(timeZoneNote)).toHaveCount(1);
+  await expect(page.getByRole("button").filter({ hasText: timeZoneNote })).toHaveCount(0);
+
   const freeSlot = page.getByRole("button", {
     name: new RegExp(`${expectedTime}\\s*Свободно`),
   });
@@ -66,6 +70,7 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   await expect(confirmationCard.getByText(timeZoneNote)).toBeVisible();
   await expect(confirmationCard).toContainText(expectedDateTime);
   await expect(page.getByText(timeZoneNote)).toHaveCount(2);
+  await expect(page.getByRole("button").filter({ hasText: timeZoneNote })).toHaveCount(0);
 
   await page.getByRole("textbox", { name: "Имя" }).fill("Тестовый гость");
   await page.getByRole("textbox", { name: "Email" }).fill("guest@example.com");
@@ -79,6 +84,7 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   await expect(successCard.getByText(timeZoneNote)).toBeVisible();
   await expect(successCard).toContainText(expectedDateTime);
   await expect(page.getByText(timeZoneNote)).toHaveCount(1);
+  await expect(page.getByRole("button").filter({ hasText: timeZoneNote })).toHaveCount(0);
 
   await page.goto("/admin");
   await expect(page.getByText(meetingTypeTitle).first()).toBeVisible();
@@ -106,6 +112,7 @@ test("guest sees a conflict when the slot is taken concurrently", async ({ page,
   await expect(slotButton).toBeVisible();
   await slotButton.click();
   await expect(page.getByText(timeZoneNote)).toHaveCount(2);
+  await expect(page.getByRole("button").filter({ hasText: timeZoneNote })).toHaveCount(0);
 
   await page.getByRole("textbox", { name: "Имя" }).fill("Второй гость");
   await page.getByRole("textbox", { name: "Email" }).fill("second@example.com");
@@ -124,4 +131,5 @@ test("guest sees a conflict when the slot is taken concurrently", async ({ page,
 
   await expect(page.getByRole("alert")).toContainText("уже занят");
   await expect(page.getByText(timeZoneNote)).toHaveCount(2);
+  await expect(page.getByRole("button").filter({ hasText: timeZoneNote })).toHaveCount(0);
 });
