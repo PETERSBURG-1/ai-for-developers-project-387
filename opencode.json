@@ -7,17 +7,5 @@
         "url": "https://mcp.railway.app/mcp"
       }
     }
-  },
-  "permissions": [
-    {
-      "action": "external_directory",
-      "resource": "/tmp/*",
-      "effect": "allow"
-    },
-    {
-      "action": "external_directory",
-      "resource": "/tmp/**",
-      "effect": "allow"
-    }
-  ]
+  }
 }

@@ -39,6 +39,7 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: '{"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
         with:
           model: opencode/deepseek-v4.1-flash
           mentions: /oc,/opencode
