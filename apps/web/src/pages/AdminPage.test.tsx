@@ -1,6 +1,6 @@
 import { MemoryRouter } from "react-router";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminPage } from "./AdminPage";
 
@@ -45,17 +45,33 @@ vi.mock("@calendar/api-client", async (importOriginal) => {
   };
 });
 
+const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
+
+afterEach(cleanup);
+
+function renderAdminPage() {
+  return render(
+    <MemoryRouter>
+      <AdminPage />
+    </MemoryRouter>,
+  );
+}
+
 describe("AdminPage", () => {
   it("shows meeting types and upcoming bookings", async () => {
-    render(
-      <MemoryRouter>
-        <AdminPage />
-      </MemoryRouter>,
-    );
+    renderAdminPage();
 
     expect(await screen.findByText("Встреча 15 минут")).toBeInTheDocument();
     expect(await screen.findByText("Анна")).toBeInTheDocument();
     expect(screen.getByText("anna@example.com")).toBeInTheDocument();
     expect(screen.getByText("Обсудить проект")).toBeInTheDocument();
+  });
+
+  it("keeps the owner view unchanged and without the Moscow time note", async () => {
+    renderAdminPage();
+
+    expect(await screen.findByText("Анна")).toBeInTheDocument();
+    expect(screen.getByText(/15 ноября.*09:00/)).toBeInTheDocument();
+    expect(screen.queryByText(timeZoneNote)).not.toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ import { Link, useParams } from "react-router";
 
 import { AvailabilityCalendar } from "@/components/availability-calendar";
 import { InputField, TextAreaField } from "@/components/form-field";
+import { MoscowTimeNote } from "@/components/moscow-time-note";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
@@ -175,6 +176,7 @@ export function MeetingTypePage() {
             <CardDescription>
               {booking.meetingType.title}, {formatDateTime(booking.start)}
             </CardDescription>
+            <MoscowTimeNote />
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -206,6 +208,7 @@ export function MeetingTypePage() {
                 <CardDescription>
                   {formatDateTime(selectedSlot.start)} · {meetingType.durationMinutes} минут
                 </CardDescription>
+                <MoscowTimeNote />
               </CardHeader>
               <CardContent>
                 <form className="grid gap-4" onSubmit={handleSubmit}>
