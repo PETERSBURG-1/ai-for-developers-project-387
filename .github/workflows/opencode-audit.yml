@@ -14,25 +14,17 @@ on:
         required: false
         default: "training-lcp"
 
-permissions:
-  contents: read
-  id-token: write
-  issues: write
-
 concurrency:
   group: opencode-audit
   cancel-in-progress: false
 
 jobs:
-  audit:
+  collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
       - name: Collect audit report
         env:
           APP_URL: ${{ vars.APP_URL }}
@@ -64,6 +56,26 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  audit:
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download audit report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: audit-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .audit
+
       - name: Expose project skills
         run: |
           mkdir -p .opencode
@@ -90,39 +102,40 @@ jobs:
             Исходные данные:
             - приложение: ${{ vars.APP_URL }}
             - run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            - artifact: audit-report-${{ github.run_id }}-${{ github.run_attempt }} (хранится 30 дней)
+            - artifact отчёта: audit-report-${{ github.run_id }}-${{ github.run_attempt }} (30 дней)
             - журнал аудита: issue #${{ vars.AUDIT_LOG_ISSUE }}
             - учебная находка: ${{ inputs.demo_finding }}
             - ключ учебной находки: ${{ inputs.demo_key }}
 
-            Прочитай файл .audit/lighthouse.json или .audit/training-finding.md.
-            Если есть training-finding.md, это учебная находка: она не является
-            подтверждённым дефектом.
+            Прочитай .audit/lighthouse.json или .audit/training-finding.md.
+            Если есть training-finding.md, это учебная находка, а не подтверждённый дефект.
 
             Действуй так:
             1. Определи одну конкретную находку либо сделай вывод, что
                подтверждённых находок нет. Для Lighthouse укажи метрику,
                значение, влияние и предлагаемое действие.
-            2. Для находки сформируй стабильный ключ и добавь в тело issue
-               маркер `<!-- audit-key: <ключ> -->`. Для учебной находки
-               используй `${{ inputs.demo_key }}`.
-            3. Найди существующие issues по маркеру через полный список тел:
-               gh issue list --state all --json number,title,body --jq
-               '.[] | select(.body | contains("audit-key: <ключ>"))'
-               Не полагайся на поисковый qualifier audit-key.
-               Если задача уже есть и новых сведений нет, не создавай новую
-               issue; оставь комментарий в журнале ${{ vars.AUDIT_LOG_ISSUE }}
+            2. Для live-находки используй детерминированный ключ по ID метрики:
+               audit-key:lighthouse-<metric-id>. Не включай значение метрики в ключ.
+               Для учебной используй ключ ${{ inputs.demo_key }}.
+               Добавь в тело issue маркер `<!-- audit-key: <ключ> -->`.
+            3. Получи полный список issues и ищи маркер в теле:
+               gh issue list --state all --limit 1000 --json number,title,body,state --jq '.[] | select(.body | contains("audit-key: <ключ>"))'
+               Не используй поисковый qualifier audit-key.
+            4. Если открытая issue уже есть и новых сведений нет — не создавай
+               новую; оставь комментарий в журнале ${{ vars.AUDIT_LOG_ISSUE }}
                с номером существующей задачи и ссылкой на run/artifact.
-            4. Если находка новая, создай отдельный issue с разделами:
+               Если issue закрыта — это повторение исправленной проблемы:
+               создай новый issue и сошлись на прежнюю задачу.
+            5. Если находка новая, создай отдельный issue с разделами:
                «Проблема», «Предлагаемое действие», «Ссылка на отчёт».
                Укажи ${{ vars.APP_URL }}, run и artifact, добавь marker audit-key.
                Для live-находки поставь label needs-triage.
                Для учебной находки поставь labels training и needs-triage,
                явно напиши, что это учебная задача, а не подтверждённый дефект.
-            5. Если подтверждённых находок нет, оставь комментарий в issue
+            6. Если подтверждённых находок нет, оставь комментарий в issue
                ${{ vars.AUDIT_LOG_ISSUE }} со ссылкой на run и artifact, без нового issue.
-            6. Не меняй код, не создавай ветки и PR.
-            7. Запиши краткий итог в .audit/agent-output.md.
+            7. Не меняй код, не создавай ветки и PR.
+            8. Запиши краткий итог в .audit/agent-output.md.
 
       - name: Upload agent output
         if: always()
