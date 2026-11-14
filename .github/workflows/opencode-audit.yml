@@ -1,0 +1,220 @@
+name: opencode-audit
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      demo_finding:
+        description: "Учебная находка для демонстрации создания issue"
+        required: false
+        default: ""
+      demo_key:
+        description: "Стабильный ключ учебной находки"
+        required: false
+        default: "training-lcp"
+
+concurrency:
+  group: opencode-audit
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Collect audit report
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          DEMO_FINDING: ${{ inputs.demo_finding }}
+        run: |
+          set -euo pipefail
+          mkdir -p .audit
+          if [ -n "${DEMO_FINDING}" ]; then
+            printf '%s\n' "${DEMO_FINDING}" > .audit/training-finding.md
+            echo "training" > .audit/mode
+            echo "Учебный отчёт подготовлен."
+          else
+            test -n "${APP_URL}"
+            npx --yes lighthouse@12.8.2 "${APP_URL}" \
+              --quiet \
+              --chrome-flags="--headless --no-sandbox --disable-gpu --disable-dev-shm-usage" \
+              --output=json \
+              --output-path=.audit/lighthouse.json
+            echo "live" > .audit/mode
+            echo "Lighthouse-отчёт сохранён."
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: audit-report-${{ github.run_id }}
+          path: .audit
+          if-no-files-found: warn
+          overwrite: true
+          include-hidden-files: true
+          retention-days: 30
+
+  audit:
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download audit report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: audit-report-${{ github.run_id }}
+          path: .audit
+
+      - name: Expose project skills
+        run: |
+          mkdir -p .opencode
+          cp -R .agents/skills .opencode/skills
+
+      - name: Run OpenCode audit
+        uses: anomalyco/opencode/github@v1.19.5
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: '{"edit":{"*":"deny",".audit/**":"allow"},"bash":"deny","webfetch":"deny","websearch":"deny","external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
+        with:
+          model: opencode/deepseek-v4.1-flash
+          share: "false"
+          prompt: |
+            Ты анализируешь отчёт аудита приложения.
+
+            Исходные данные:
+            - приложение: ${{ vars.APP_URL }}
+            - run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - artifact отчёта: audit-report-${{ github.run_id }} (30 дней)
+            - учебная находка: ${{ inputs.demo_finding }}
+            - ключ учебной находки: ${{ inputs.demo_key || 'training-lcp' }}
+
+            Прочитай .audit/lighthouse.json или .audit/training-finding.md.
+            Если есть training-finding.md, это учебная находка, а не подтверждённый дефект.
+
+            Реши, есть ли одна конкретная подтверждённая находка. Для Lighthouse
+            укажи метрику, значение, влияние и предлагаемое действие. Если
+            подтверждённых находок нет, finding=false.
+
+            Для live-находки используй детерминированный ключ по ID метрики:
+            lighthouse-<metric-id> без значения метрики. Для учебной используй
+            ключ `${{ inputs.demo_key || 'training-lcp' }}`.
+
+            Запиши в .audit/agent-output.json ровно такой JSON:
+            {
+              "finding": true,
+              "key": "lighthouse-example",
+              "title": "Короткий заголовок",
+              "problem": "Что не так и при каких условиях",
+              "action": "Что сделать",
+              "training": false
+            }
+            Для учебной находки поле training=true, для live — false.
+            Для отсутствия находки: {"finding": false}.
+            Не создавай issues и комментарии, не меняй код и не запускай shell.
+            Ветки и PR не создавай.
+
+      - name: Upload agent output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: audit-output-${{ github.run_id }}
+          path: .audit/agent-output.json
+          if-no-files-found: warn
+          overwrite: true
+          include-hidden-files: true
+          retention-days: 30
+
+  publish:
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Download agent output
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: audit-output-${{ github.run_id }}
+          path: .audit
+
+      - name: Publish audit result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          AUDIT_LOG_ISSUE: ${{ vars.AUDIT_LOG_ISSUE || 19 }}
+          APP_URL: ${{ vars.APP_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_NAME: audit-report-${{ github.run_id }}
+          DEMO_FINDING: ${{ inputs.demo_finding }}
+        run: |
+          set -euo pipefail
+          test -s .audit/agent-output.json
+          jq -e . .audit/agent-output.json >/dev/null
+          finding="$(jq -r '.finding // false' .audit/agent-output.json)"
+          key="$(jq -r '.key // ""' .audit/agent-output.json)"
+          training="$(jq -r '.training // false' .audit/agent-output.json)"
+          if [ -n "${DEMO_FINDING}" ]; then training=true; fi
+          if [ "$finding" != "true" ]; then
+            gh issue comment "$AUDIT_LOG_ISSUE" --body "audit: подтверждённых находок нет. App: ${APP_URL}. Run: ${RUN_URL}. Artifact: ${ARTIFACT_NAME}."
+            exit 0
+          fi
+          case "$key" in
+            ""|*[!a-z0-9-]*) echo "Некорректный audit-key: $key" >&2; exit 1 ;;
+          esac
+          marker="audit-key: ${key}"
+          exact_marker="<!-- ${marker} -->"
+          gh issue list --state all --limit 1000 --json number,title,body,state > /tmp/audit-issues.json
+          open_issue="$(jq -r --arg marker "$exact_marker" '[.[] | select(.body | contains($marker)) | select(.state == "OPEN")][0].number // empty' /tmp/audit-issues.json)"
+          closed_issue="$(jq -r --arg marker "$exact_marker" '[.[] | select(.body | contains($marker)) | select(.state == "CLOSED")][0].number // empty' /tmp/audit-issues.json)"
+          if [ -n "$open_issue" ]; then
+            gh issue comment "$AUDIT_LOG_ISSUE" --body "audit: найдена уже открытая задача #${open_issue}. Новых сведений нет, новый issue не создан. Run: ${RUN_URL}. Artifact: ${ARTIFACT_NAME}."
+            exit 0
+          fi
+          title="$(jq -r '.title // "Находка аудита"' .audit/agent-output.json)"
+          body="$(jq -r --arg app "$APP_URL" --arg run "$RUN_URL" --arg artifact "$ARTIFACT_NAME" --arg marker "$marker" '"\(.problem)\n\n### Предлагаемое действие\n\(.action)\n\n### Ссылка на отчёт\n- App: \($app)\n- Run: \($run)\n- Artifact: \($artifact)\n\n<!-- \($marker) -->"' .audit/agent-output.json)"
+          if [ -n "$closed_issue" ]; then
+            body="${body}"$'\n\n'"Повторение после закрытой задачи #${closed_issue}."
+          fi
+          labels=(--label needs-triage)
+          if [ "$training" = "true" ]; then
+            body="${body}"$'\n\n'"Учебная находка, не подтверждённый дефект приложения."
+            labels+=(--label training)
+          fi
+          gh issue create --title "$title" --body "$body" "${labels[@]}"
+
+  report:
+    needs: [collect, audit, publish]
+    if: |
+      always() &&
+      (needs.collect.result != 'success' || needs.audit.result != 'success' || needs.publish.result != 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Report audit failure
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          AUDIT_LOG_ISSUE: ${{ vars.AUDIT_LOG_ISSUE || 19 }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          APP_URL: ${{ vars.APP_URL }}
+          COLLECT_RESULT: ${{ needs.collect.result }}
+          AUDIT_RESULT: ${{ needs.audit.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        run: |
+          set -euo pipefail
+          gh issue comment "${AUDIT_LOG_ISSUE}" --body "audit_failed: данные аудита не получены или агент не завершил разбор. Нужен человек. collect=${COLLECT_RESULT}, audit=${AUDIT_RESULT}, publish=${PUBLISH_RESULT}, app=${APP_URL}, run=${RUN_URL}"

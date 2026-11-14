@@ -12,4 +12,10 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
+The audit workflow additionally uses:
+
+| Label      | Meaning                                                      |
+| ---------- | ------------------------------------------------------------ |
+| `training` | Учебная находка аудита, не подтверждённый дефект приложения. |
+
 Edit the "Label in our tracker" column to match whatever vocabulary you actually use.
