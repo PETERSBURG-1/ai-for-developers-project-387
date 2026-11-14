@@ -11,6 +11,7 @@ mise.local.toml
 *.log
 .DS_Store
 Thumbs.db
+.opencode/skills/
 .playwright-mcp/
 test-results/
 playwright-report/
