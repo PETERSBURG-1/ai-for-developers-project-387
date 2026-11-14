@@ -1,0 +1,86 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  actions: read
+  checks: read
+  statuses: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
+       github.event.pull_request.user.login == 'opencode-agent[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: opencode-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Record head SHA
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "HEAD_SHA=$sha" >> "$GITHUB_ENV"
+          test "$sha" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Install OpenCode CLI
+        run: |
+          curl -fsSL https://opencode.ai/install | bash
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Generate review
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"allow","gh pr comment*":"deny","gh issue comment*":"deny","git push*":"deny"},"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          cat > /tmp/review-prompt.md <<PROMPT
+          Ты независимый ревьюер PR #${PR_NUMBER} в репозитории ${GITHUB_REPOSITORY}.
+          Проверяемый head SHA: ${HEAD_SHA}.
+
+          Прочитай:
+          - описание PR: gh pr view ${PR_NUMBER} --json title,body,headRefOid
+          - diff: gh pr diff ${PR_NUMBER}
+          - статусы CI: gh pr checks ${PR_NUMBER} (если команда возвращает ненулевой код, зафиксируй статусы)
+          - спецификацию, тикеты и комментарий согласования по ссылкам из описания PR
+          - критерии ниже.
+
+          Не меняй файлы, не делай commit/push и не публикуй комментарий — это сделает отдельный шаг после тебя.
+          Оценивай риск по последствиям ошибки, а не по числу изменённых строк.
+          Для каждого подтверждённого дефекта укажи файл, строку, условие ошибки и последствие.
+          Если подтверждённых дефектов нет, скажи об этом прямо. Не дублируй вывод линтера.
+
+          ## REVIEW.md
+
+          PROMPT
+          cat REVIEW.md >> /tmp/review-prompt.md
+          opencode run --model opencode/deepseek-v4.1-flash --agent plan --auto "$(cat /tmp/review-prompt.md)" > review.md
+
+      - name: Publish review
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ ! -s review.md ]; then
+            echo "OpenCode не вернул текст ревью" >&2
+            exit 1
+          fi
+          gh pr comment "$PR_NUMBER" --body-file review.md
