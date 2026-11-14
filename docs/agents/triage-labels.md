@@ -14,8 +14,8 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 The audit workflow additionally uses:
 
-| Label      | Meaning                                                     |
-| ---------- | ----------------------------------------------------------- |
+| Label      | Meaning                                                      |
+| ---------- | ------------------------------------------------------------ |
 | `training` | Учебная находка аудита, не подтверждённый дефект приложения. |
 
 Edit the "Label in our tracker" column to match whatever vocabulary you actually use.
