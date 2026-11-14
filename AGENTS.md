@@ -35,6 +35,8 @@
 
 Набор инженерных скиллов — в `.agents/skills`. В OpenCode вызывайте скилл по имени или через `@.agents/skills/<name>/SKILL.md`.
 
+GitHub-агент: `.github/workflows/opencode.yml`, команды `/oc` и `/opencode`. События, модель, права и результаты описаны в [README.md](README.md#github-агент).
+
 ### Issue tracker
 
 GitHub Issues in `PETERSBURG-1/ai-for-developers-project-387`. See `docs/agents/issue-tracker.md`.

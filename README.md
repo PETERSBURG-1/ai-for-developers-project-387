@@ -157,6 +157,35 @@ https://calendar-production-5f3e8aa8.up.railway.app
 Проект `calendar-booking-386`, сервис `calendar`. Railway собирает `Dockerfile`
 из ветки `main`; контейнер слушает порт из `PORT`.
 
+## GitHub-агент
+
+В репозитории используется GitHub App [OpenCode Agent](https://github.com/apps/opencode-agent)
+и воркфлоу `.github/workflows/opencode.yml`. Ключ модели хранится только в
+GitHub Secrets под именем `OPENCODE_API_KEY`.
+
+Воркфлоу запускается по комментариям:
+
+- `issue_comment` с типом `created` — обсуждение issue или PR;
+- `pull_request_review_comment` с типом `created` — комментарий к строке diff.
+
+Команды вызова — `/oc` и `/opencode` (стандартный набор `mentions`). Работать
+может только автор с ролью `OWNER`, `MEMBER` или `COLLABORATOR`; комментарии
+ботов игнорируются. Модель — `opencode/deepseek-v4.1-flash`.
+
+Агент объясняет issue, помогает с реализацией, вносит правки в PR и разбирает
+строки diff. Ответ появляется комментарием в issue или PR, изменения — в
+ветке и PR. Прогон и логи доступны в Actions, workflow `opencode`.
+
+Права задания: `contents: read` и `id-token: write`; checkout выполняется с
+`persist-credentials: false`. Агент действует токеном OpenCode App. Таймаут
+задания — 30 минут, параллельные запуски ограничены номером issue или PR.
+Сессии не публикуются (`share: false`). Перед запуском на чистом раннере
+воркфлоу копирует проектные скиллы из `.agents/skills` в `.opencode/skills`;
+настройки трекера берутся из `docs/agents/`, команды — из `AGENTS.md`.
+
+Для запуска добавьте ключ OpenCode в Settings → Secrets and variables → Actions
+под именем `OPENCODE_API_KEY` и установите приложение на репозиторий.
+
 ### Деплой
 
 Проектная конфигурация MCP находится в `opencode.json`: сервер Railway
