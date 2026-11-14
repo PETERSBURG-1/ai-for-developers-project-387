@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/PETERSBURG-1/ai-for-developers-project-387/compare/calendar-v1.0.0...calendar-v1.1.0) (2026-11-14)
+
+
+### Features
+
+* show Moscow time zone note in guest booking flow ([#8](https://github.com/PETERSBURG-1/ai-for-developers-project-387/issues/8), [#9](https://github.com/PETERSBURG-1/ai-for-developers-project-387/issues/9), [#10](https://github.com/PETERSBURG-1/ai-for-developers-project-387/issues/10)) ([a923580](https://github.com/PETERSBURG-1/ai-for-developers-project-387/commit/a923580735b82b578a3c3fd7299a8e0e556370f1))
+
+
+### Bug Fixes
+
+* pass v1 permissions to opencode workflow ([bbb192a](https://github.com/PETERSBURG-1/ai-for-developers-project-387/commit/bbb192aeb235354e292292e42e46f516e42c763f))
+* publish budget report via issues api ([da184e2](https://github.com/PETERSBURG-1/ai-for-developers-project-387/commit/da184e2b75a3f1ef688e46f528d46ef9fb1b5c93))
+* report exhausted budget from separate job ([795692d](https://github.com/PETERSBURG-1/ai-for-developers-project-387/commit/795692dbab9c4cb59f14c11262ce2d3209bf3f70))
+
 ## 1.0.0 (2026-11-14)
 
 
