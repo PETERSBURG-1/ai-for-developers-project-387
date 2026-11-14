@@ -59,7 +59,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: audit-report-${{ github.run_id }}
+          name: audit-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: .audit
           if-no-files-found: warn
           retention-days: 30
@@ -74,11 +74,11 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"allow","git push*":"deny","gh pr create*":"deny"},"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
+          OPENCODE_PERMISSION: '{"edit":{"*":"deny",".audit/**":"allow"},"bash":{"*":"deny","gh issue list*":"allow","gh issue view*":"allow","gh issue create*":"allow","gh issue comment*":"allow"},"webfetch":"deny","websearch":"deny","external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
           APP_URL: ${{ vars.APP_URL }}
           AUDIT_LOG_ISSUE: ${{ vars.AUDIT_LOG_ISSUE }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          ARTIFACT_NAME: audit-report-${{ github.run_id }}
+          ARTIFACT_NAME: audit-report-${{ github.run_id }}-${{ github.run_attempt }}
           DEMO_FINDING: ${{ inputs.demo_finding }}
           DEMO_KEY: ${{ inputs.demo_key }}
         with:
@@ -88,12 +88,12 @@ jobs:
             Ты выполняешь аудит приложения.
 
             Исходные данные:
-            - приложение: ${APP_URL}
-            - run: ${RUN_URL}
-            - artifact: ${ARTIFACT_NAME} (хранится 30 дней)
-            - журнал аудита: issue #${AUDIT_LOG_ISSUE}
-            - учебная находка: ${DEMO_FINDING}
-            - ключ учебной находки: ${DEMO_KEY}
+            - приложение: ${{ vars.APP_URL }}
+            - run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - artifact: audit-report-${{ github.run_id }}-${{ github.run_attempt }} (хранится 30 дней)
+            - журнал аудита: issue #${{ vars.AUDIT_LOG_ISSUE }}
+            - учебная находка: ${{ inputs.demo_finding }}
+            - ключ учебной находки: ${{ inputs.demo_key }}
 
             Прочитай файл .audit/lighthouse.json или .audit/training-finding.md.
             Если есть training-finding.md, это учебная находка: она не является
@@ -105,20 +105,22 @@ jobs:
                значение, влияние и предлагаемое действие.
             2. Для находки сформируй стабильный ключ и добавь в тело issue
                маркер `<!-- audit-key: <ключ> -->`. Для учебной находки
-               используй `${DEMO_KEY}`.
-            3. Найди существующие issues по маркеру:
-               gh issue list --state all --search "audit-key: ${ключ}".
+               используй `${{ inputs.demo_key }}`.
+            3. Найди существующие issues по маркеру через полный список тел:
+               gh issue list --state all --json number,title,body --jq
+               '.[] | select(.body | contains("audit-key: <ключ>"))'
+               Не полагайся на поисковый qualifier audit-key.
                Если задача уже есть и новых сведений нет, не создавай новую
-               и не публикуй одинаковый комментарий; запиши вывод в
-               .audit/agent-output.md.
+               issue; оставь комментарий в журнале ${{ vars.AUDIT_LOG_ISSUE }}
+               с номером существующей задачи и ссылкой на run/artifact.
             4. Если находка новая, создай отдельный issue с разделами:
                «Проблема», «Предлагаемое действие», «Ссылка на отчёт».
-               Укажи APP_URL, run и artifact, добавь marker audit-key.
+               Укажи ${{ vars.APP_URL }}, run и artifact, добавь marker audit-key.
                Для live-находки поставь label needs-triage.
                Для учебной находки поставь labels training и needs-triage,
                явно напиши, что это учебная задача, а не подтверждённый дефект.
             5. Если подтверждённых находок нет, оставь комментарий в issue
-               ${AUDIT_LOG_ISSUE} со ссылкой на run и artifact, без нового issue.
+               ${{ vars.AUDIT_LOG_ISSUE }} со ссылкой на run и artifact, без нового issue.
             6. Не меняй код, не создавай ветки и PR.
             7. Запиши краткий итог в .audit/agent-output.md.
 
@@ -126,7 +128,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: audit-output-${{ github.run_id }}
+          name: audit-output-${{ github.run_id }}-${{ github.run_attempt }}
           path: .audit/agent-output.md
           if-no-files-found: warn
           retention-days: 30

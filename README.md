@@ -243,6 +243,21 @@ workflow и `REVIEW.md` берутся из base; код PR не исполня�
 Playwright с включённым trace. Артефакт `playwright-<sha>` содержит trace/report,
 результат и SHA; перед мержем человек сверяет SHA с текущим head PR.
 
+### Аудит по расписанию
+
+Ежедневный Lighthouse-аудит запускает `.github/workflows/opencode-audit.yml`:
+`schedule` с cron `17 3 * * *` (06:17 МСК) и `workflow_dispatch`. Задание имеет
+`timeout-minutes: 30`; параллельные аудиты ограничены `concurrency`.
+
+Адрес приложения задаётся repository variable `APP_URL`; журнал аудита —
+`AUDIT_LOG_ISSUE` (issue #19). Отчёт Lighthouse и итог агента сохраняются
+artifact `audit-report-<run_id>-<run_attempt>` на 30 дней. Агент анализирует
+отчёт, ищет существующие задачи по маркеру `audit-key` в теле issues и создаёт
+новый issue только по новой находке. При отсутствии находок или дубле он
+пишет результат в журнал аудита. Учебная находка передаётся через
+`workflow_dispatch` inputs `demo_finding`/`demo_key`, помечается label
+`training` и не считается подтверждённым дефектом. `.audit/` исключён из Git.
+
 ### Деплой
 
 Проектная конфигурация MCP находится в `opencode.json`: сервер Railway
