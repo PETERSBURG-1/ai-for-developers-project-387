@@ -1,0 +1,132 @@
+name: opencode-audit
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      demo_finding:
+        description: "Учебная находка для демонстрации создания issue"
+        required: false
+        default: ""
+      demo_key:
+        description: "Стабильный ключ учебной находки"
+        required: false
+        default: "training-lcp"
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+concurrency:
+  group: opencode-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Collect audit report
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          DEMO_FINDING: ${{ inputs.demo_finding }}
+        run: |
+          set -euo pipefail
+          mkdir -p .audit
+          if [ -n "${DEMO_FINDING}" ]; then
+            printf '%s\n' "${DEMO_FINDING}" > .audit/training-finding.md
+            echo "training" > .audit/mode
+            echo "Учебный отчёт подготовлен."
+          else
+            test -n "${APP_URL}"
+            npx --yes lighthouse@12.8.2 "${APP_URL}" \
+              --quiet \
+              --chrome-flags="--headless --no-sandbox --disable-gpu --disable-dev-shm-usage" \
+              --output=json \
+              --output-path=.audit/lighthouse.json
+            echo "live" > .audit/mode
+            echo "Lighthouse-отчёт сохранён."
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: audit-report-${{ github.run_id }}
+          path: .audit
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Expose project skills
+        run: |
+          mkdir -p .opencode
+          cp -R .agents/skills .opencode/skills
+
+      - name: Run OpenCode audit
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"allow","git push*":"deny","gh pr create*":"deny"},"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
+          APP_URL: ${{ vars.APP_URL }}
+          AUDIT_LOG_ISSUE: ${{ vars.AUDIT_LOG_ISSUE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_NAME: audit-report-${{ github.run_id }}
+          DEMO_FINDING: ${{ inputs.demo_finding }}
+          DEMO_KEY: ${{ inputs.demo_key }}
+        with:
+          model: opencode/deepseek-v4.1-flash
+          share: "false"
+          prompt: |
+            Ты выполняешь аудит приложения.
+
+            Исходные данные:
+            - приложение: ${APP_URL}
+            - run: ${RUN_URL}
+            - artifact: ${ARTIFACT_NAME} (хранится 30 дней)
+            - журнал аудита: issue #${AUDIT_LOG_ISSUE}
+            - учебная находка: ${DEMO_FINDING}
+            - ключ учебной находки: ${DEMO_KEY}
+
+            Прочитай файл .audit/lighthouse.json или .audit/training-finding.md.
+            Если есть training-finding.md, это учебная находка: она не является
+            подтверждённым дефектом.
+
+            Действуй так:
+            1. Определи одну конкретную находку либо сделай вывод, что
+               подтверждённых находок нет. Для Lighthouse укажи метрику,
+               значение, влияние и предлагаемое действие.
+            2. Для находки сформируй стабильный ключ и добавь в тело issue
+               маркер `<!-- audit-key: <ключ> -->`. Для учебной находки
+               используй `${DEMO_KEY}`.
+            3. Найди существующие issues по маркеру:
+               gh issue list --state all --search "audit-key: ${ключ}".
+               Если задача уже есть и новых сведений нет, не создавай новую
+               и не публикуй одинаковый комментарий; запиши вывод в
+               .audit/agent-output.md.
+            4. Если находка новая, создай отдельный issue с разделами:
+               «Проблема», «Предлагаемое действие», «Ссылка на отчёт».
+               Укажи APP_URL, run и artifact, добавь marker audit-key.
+               Для live-находки поставь label needs-triage.
+               Для учебной находки поставь labels training и needs-triage,
+               явно напиши, что это учебная задача, а не подтверждённый дефект.
+            5. Если подтверждённых находок нет, оставь комментарий в issue
+               ${AUDIT_LOG_ISSUE} со ссылкой на run и artifact, без нового issue.
+            6. Не меняй код, не создавай ветки и PR.
+            7. Запиши краткий итог в .audit/agent-output.md.
+
+      - name: Upload agent output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: audit-output-${{ github.run_id }}
+          path: .audit/agent-output.md
+          if-no-files-found: warn
+          retention-days: 30
