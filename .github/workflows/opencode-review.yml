@@ -1,0 +1,136 @@
+name: opencode-review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
+       github.event.pull_request.user.login == 'opencode-agent[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: read
+    steps:
+      - name: Checkout base revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build review context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          current_sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
+          test "$current_sha" = "$HEAD_SHA"
+          {
+            echo "# PR context"
+            gh pr view "$PR_NUMBER" --json number,title,body,headRefOid
+            echo
+            echo "# Diff"
+            gh pr diff "$PR_NUMBER"
+            echo
+            echo "# Checks"
+            gh pr checks "$PR_NUMBER" || true
+          } > /tmp/review-context.md
+          {
+            echo
+            echo "# Linked issue context"
+            for n in $(gh pr view "$PR_NUMBER" --json body --jq .body | grep -oE '#[0-9]+' | tr -d '#' | sort -u); do
+              echo
+              gh issue view "$n" --json number,title,body,comments,state,labels || true
+            done
+            echo
+            echo "# REVIEW.md"
+            cat REVIEW.md
+          } >> /tmp/review-context.md
+
+      - name: Install pinned OpenCode CLI
+        run: |
+          set -euo pipefail
+          version="v1.19.5"
+          checksum="588310a336fa3b9df36b3f0225b26f679d453efaad0cf3d66c3651ef3ec1647a"
+          archive="${RUNNER_TEMP}/opencode-linux-x64.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/${version}/opencode-linux-x64.tar.gz"
+          echo "${checksum}  ${archive}" | sha256sum --check
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/opencode" "$HOME/.opencode/bin/opencode"
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Generate review
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny","external_directory":"deny"}'
+        run: |
+          cat > /tmp/review-prompt.md <<'PROMPT'
+          Ты независимый ревьюер PR. Тебе передан контекст ниже: описание PR, diff,
+          статусы CI, связанные issues и REVIEW.md.
+
+          Не меняй файлы, не выполняй команды и не публикуй комментарий: это сделает
+          отдельный шаг после тебя.
+          Оценивай риск по последствиям ошибки, а не по числу изменённых строк.
+          Для каждого подтверждённого дефекта укажи файл, строку, условие ошибки и
+          последствие. Если подтверждённых дефектов нет, скажи об этом прямо.
+          Не дублируй вывод линтера. Сверь результат со спецификацией и
+          согласованием человека из контекста.
+
+          PROMPT
+          cat /tmp/review-context.md >> /tmp/review-prompt.md
+          opencode run --model opencode/deepseek-v4.1-flash --agent plan "$(cat /tmp/review-prompt.md)" > review.md
+
+      - name: Upload review text
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: opencode-review
+          path: review.md
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: review
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Download review text
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p review
+          gh run download "${GITHUB_RUN_ID}" --name opencode-review --dir review
+      - name: Publish review comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          test -s review/review.md
+          gh pr comment "$PR_NUMBER" --body-file review/review.md

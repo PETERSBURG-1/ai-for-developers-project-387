@@ -208,10 +208,40 @@ GitHub Secrets под именем `OPENCODE_API_KEY`.
 комментарий в issue, а прогон и логи доступны в Actions, workflow
 `opencode-triage`.
 
-### Проверка
+### Авторевью PR
 
-Создайте issue и отправьте комментарий `/oc explain this issue`; ответ появится
-комментарием в issue, прогон — в Actions workflow `opencode`.
+Независимое авторевью запускает `.github/workflows/opencode-review.yml` на
+событии `pull_request`: `opened`, `synchronize`, `reopened`, `ready_for_review`.
+Оно работает с точным `head.sha` PR, только для веток этого репозитория и
+доверенных авторов; PR от `opencode-agent[bot]` разрешён, PR из fork пропускаются
+без секретов. Используется обычный OpenCode CLI в read-only режиме, отдельный шаг
+публикует результат через `gh pr comment`.
+
+Критерии ревью лежат в `REVIEW.md` и передаются агенту в prompt. Агент читает
+описание PR, спецификацию, тикеты, согласование, diff и статусы CI. Определение
+workflow и `REVIEW.md` берутся из base; код PR не исполняется, diff читается
+через `gh`. Агент ревью работает с read-only токеном: `contents: read`,
+`issues: read`, `actions: read`, `checks: read`, `statuses: read`,
+`pull-requests: read`. Публикация — отдельное задание с `pull-requests: write`.
+Таймаут — 20 минут, concurrency отменяет устаревшее ревью того же PR.
+Авторевью не меняет код.
+
+### Бюджет запусков на PR
+
+Интерактивный workflow `opencode` разрешает не больше трёх запросов `/oc` на
+один PR. Попытки считаются по истории Actions и `run_attempt` до вызова модели;
+комментарий PR не является источником бюджета. Исчерпание публикует отдельный
+комментарий с причиной `limit_exhausted`, последним SHA и ссылкой на лог. Для отмены или таймаута
+отдельное задание публикует `timeout_or_cancelled`, для сбоя агента —
+`agent_failed`; следующее действие выбирает человек.
+
+### Шаблон PR и браузерная проверка
+
+`.github/pull_request_template.md` требует заполнить проверки, риск и способ
+отката. На PR отдельное задание `browser` в CI переключается на точный
+`pull_request.head.sha`, записывает фактический `git rev-parse HEAD` и запускает
+Playwright с включённым trace. Артефакт `playwright-<sha>` содержит trace/report,
+результат и SHA; перед мержем человек сверяет SHA с текущим head PR.
 
 ### Деплой
 

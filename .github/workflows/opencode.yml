@@ -1,5 +1,7 @@
 name: opencode
 
+run-name: opencode-${{ github.event.issue.number || github.event.pull_request.number }}
+
 on:
   issue_comment:
     types: [created]
@@ -10,6 +12,8 @@ permissions:
   contents: read
   id-token: write
   issues: write
+  pull-requests: read
+  actions: read
 
 jobs:
   opencode:
@@ -34,7 +38,34 @@ jobs:
           mkdir -p .opencode
           cp -R .agents/skills .opencode/skills
 
+      - name: Check PR run budget
+        id: budget
+        if: github.event.issue.pull_request != null || github.event.pull_request != null
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          previous="$(
+            for event in issue_comment pull_request_review_comment; do
+              gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?event=${event}&per_page=100" \
+                --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID} and .display_title == \"opencode-${PR_NUMBER}\" and .conclusion != \"skipped\") | .run_attempt"
+            done | awk '{sum += $1} END {print sum + 0}'
+          )"
+          attempts=$((previous + ${GITHUB_RUN_ATTEMPT:-1} - 1))
+          echo "attempts=${attempts}" >> "$GITHUB_OUTPUT"
+          echo "PR #${PR_NUMBER}: attempts=${attempts}, limit=3"
+          if [ "$attempts" -ge 3 ]; then
+            sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            gh issue comment "$PR_NUMBER" --body "limit_exhausted: превышен лимит 3 запуска на PR. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run OpenCode
+        if: steps.budget.outputs.allowed != 'false'
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -44,3 +75,33 @@ jobs:
           model: opencode/deepseek-v4.1-flash
           mentions: /oc,/opencode
           share: "false"
+
+  report:
+    needs: opencode
+    if: |
+      always() &&
+      (github.event.issue.pull_request != null || github.event.pull_request != null) &&
+      needs.opencode.result != 'success' &&
+      needs.opencode.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Report outcome
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          RESULT: ${{ needs.opencode.result }}
+        run: |
+          set -euo pipefail
+          if [ "$RESULT" = "cancelled" ]; then
+            reason="timeout_or_cancelled"
+          else
+            reason="agent_failed"
+          fi
+          sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh issue comment "$PR_NUMBER" --body "${reason}: запуск агента не завершился успешно. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
