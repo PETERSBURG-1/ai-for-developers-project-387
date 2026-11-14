@@ -1,5 +1,6 @@
 import type { AvailabilityDay, Slot } from "@calendar/api-client";
 
+import { MoscowTimeNote } from "@/components/moscow-time-note";
 import { formatDay, formatTime } from "@/lib/format";
 
 interface AvailabilityCalendarProps {
@@ -48,6 +49,7 @@ export function AvailabilityCalendar({
 
       <div>
         <h2 className="text-lg font-semibold">Слоты на {formatDay(currentDay.date)}</h2>
+        <MoscowTimeNote className="mt-2" />
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {currentDay.slots.map((slot) => (
             <button

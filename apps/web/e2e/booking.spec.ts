@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const meetingTypeId = `e2e-${Date.now()}`;
 const meetingTypeTitle = "E2E встреча";
+const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
 const timeFormatter = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "Europe/Moscow",
   hour: "2-digit",
@@ -24,12 +25,20 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   await page.goto("/book");
   await page.locator(`a[href="/book/${meetingTypeId}"]`).click();
   await expect(page.getByRole("heading", { name: meetingTypeTitle })).toBeVisible();
+  await expect(page.getByText(timeZoneNote)).toHaveCount(1);
 
   await page.locator('ul[aria-label="Дни"] button').nth(1).click();
-  await page
-    .getByRole("button", { name: /Свободно/ })
-    .first()
-    .click();
+  const freeSlot = page.getByRole("button", { name: /Свободно/ }).first();
+  const slotTime = await freeSlot.locator("span").first().innerText();
+  await freeSlot.click();
+
+  const confirmationCard = page
+    .locator('[data-slot="card"]')
+    .filter({ hasText: "Подтвердите запись" });
+  await expect(confirmationCard.getByText(timeZoneNote)).toBeVisible();
+  await expect(confirmationCard).toContainText(slotTime);
+  await expect(page.getByText(timeZoneNote)).toHaveCount(2);
+
   await page.getByRole("textbox", { name: "Имя" }).fill("Тестовый гость");
   await page.getByRole("textbox", { name: "Email" }).fill("guest@example.com");
   await page.getByRole("textbox", { name: "Заметка" }).fill("Проверка записи");
@@ -38,10 +47,16 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   await expect(page.getByText("Вы записаны")).toBeVisible();
   await expect(page.getByText(meetingTypeTitle, { exact: false }).first()).toBeVisible();
 
+  const successCard = page.locator('[data-slot="card"]').filter({ hasText: "Вы записаны" });
+  await expect(successCard.getByText(timeZoneNote)).toBeVisible();
+  await expect(successCard).toContainText(slotTime);
+  await expect(page.getByText(timeZoneNote)).toHaveCount(1);
+
   await page.goto("/admin");
   await expect(page.getByText(meetingTypeTitle).first()).toBeVisible();
   await expect(page.getByText("Тестовый гость").first()).toBeVisible();
   await expect(page.getByText("guest@example.com").first()).toBeVisible();
+  await expect(page.getByText(timeZoneNote)).toHaveCount(0);
 });
 
 test("guest sees a conflict when the slot is taken concurrently", async ({ page, request }) => {
