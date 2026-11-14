@@ -188,6 +188,26 @@ GitHub Secrets под именем `OPENCODE_API_KEY`.
 Для запуска добавьте ключ OpenCode в Settings → Secrets and variables → Actions
 под именем `OPENCODE_API_KEY` и установите приложение на репозиторий.
 
+### Автотриаж
+
+Новые обращения разбирает отдельный воркфлоу `.github/workflows/opencode-triage.yml`.
+Он запускается по событию `issues` с типом `opened` и передаёт агенту prompt,
+который вызывает скилл `triage`: агент читает `docs/agents/issue-tracker.md`,
+`docs/agents/triage-labels.md` и `AGENTS.md`, проверяет текущее поведение
+приложения, ставит категорию и состояние и оставляет комментарий с конкретными
+вопросами или agent brief. Спецификацию, тикеты, код и PR он не создаёт.
+
+Запуск ограничен доверенными авторами с ролью `OWNER`, `MEMBER` или
+`COLLABORATOR`; issues от ботов не разбираются. Обращения с метками
+`ready-for-agent` и `wayfinder:task` пропускаются — они уже подготовлены.
+
+Модель — `opencode/deepseek-v4.1-flash`, таймаут задания — 20 минут,
+параллельные запуски ограничены номером issue (одна очередь на issue).
+Права задания: `contents: read`, `id-token: write` и `issues: write` для
+`gh`-команд скилла; `GH_TOKEN` берётся из `GITHUB_TOKEN` задания. Результат —
+комментарий в issue, а прогон и логи доступны в Actions, workflow
+`opencode-triage`.
+
 ### Проверка
 
 Создайте issue и отправьте комментарий `/oc explain this issue`; ответ появится
