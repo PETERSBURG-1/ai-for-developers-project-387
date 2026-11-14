@@ -176,8 +176,10 @@ GitHub Secrets под именем `OPENCODE_API_KEY`.
 строки diff. Ответ появляется комментарием в issue или PR, изменения — в
 ветке и PR. Прогон и логи доступны в Actions, workflow `opencode`.
 
-Права задания: `contents: read` и `id-token: write`; checkout выполняется с
-`persist-credentials: false`. Агент действует токеном OpenCode App. Таймаут
+Права задания: `contents: read`, `id-token: write` и `issues: write` для
+`gh`-команд скиллов; checkout выполняется с `persist-credentials: false`.
+`GH_TOKEN` берётся из `GITHUB_TOKEN` задания, остальные действия агента идут
+токеном OpenCode App. Таймаут
 задания — 30 минут, параллельные запуски ограничены номером issue или PR.
 Сессии не публикуются (`share: false`). Перед запуском на чистом раннере
 воркфлоу копирует проектные скиллы из `.agents/skills` в `.opencode/skills`;
