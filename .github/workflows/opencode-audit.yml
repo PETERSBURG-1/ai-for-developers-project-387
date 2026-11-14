@@ -217,27 +217,3 @@ jobs:
         run: |
           set -euo pipefail
           gh issue comment "${AUDIT_LOG_ISSUE}" --body "audit_failed: данные аудита не получены или агент не завершил разбор. Нужен человек. collect=${COLLECT_RESULT}, audit=${AUDIT_RESULT}, publish=${PUBLISH_RESULT}, app=${APP_URL}, run=${RUN_URL}"
-
-  report:
-    needs: [collect, audit, publish]
-    if: |
-      always() &&
-      (needs.collect.result != 'success' || needs.audit.result != 'success' || needs.publish.result != 'success')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      issues: write
-    steps:
-      - name: Report audit failure
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          AUDIT_LOG_ISSUE: ${{ vars.AUDIT_LOG_ISSUE }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          APP_URL: ${{ vars.APP_URL }}
-          COLLECT_RESULT: ${{ needs.collect.result }}
-          AUDIT_RESULT: ${{ needs.audit.result }}
-          PUBLISH_RESULT: ${{ needs.publish.result }}
-        run: |
-          set -euo pipefail
-          gh issue comment "${AUDIT_LOG_ISSUE}" --body "audit_failed: данные аудита не получены или агент не завершил разбор. Нужен человек. collect=${COLLECT_RESULT}, audit=${AUDIT_RESULT}, publish=${PUBLISH_RESULT}, app=${APP_URL}, run=${RUN_URL}"
