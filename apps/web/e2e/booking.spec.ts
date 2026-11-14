@@ -1,10 +1,19 @@
 import { expect, test } from "@playwright/test";
 
+import { MOSCOW_TIME_ZONE, MOSCOW_TIME_ZONE_NOTE } from "../src/lib/moscow-time.ts";
+
 const meetingTypeId = `e2e-${Date.now()}`;
 const meetingTypeTitle = "E2E встреча";
-const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
+const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
 const timeFormatter = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: "Europe/Moscow",
+  timeZone: MOSCOW_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const dateTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: MOSCOW_TIME_ZONE,
+  day: "numeric",
+  month: "long",
   hour: "2-digit",
   minute: "2-digit",
 });
@@ -22,21 +31,37 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
   });
   expect(created.status()).toBe(201);
 
+  const availabilityResponse = await request.get(
+    `/api/meeting-types/${meetingTypeId}/availability`,
+  );
+  expect(availabilityResponse.status()).toBe(200);
+  const availability = (await availabilityResponse.json()) as {
+    days: Array<{ slots: Array<{ start: string; available: boolean }> }>;
+  };
+  const chosenSlot = availability.days[1]?.slots.find((candidate) => candidate.available);
+  if (!chosenSlot) {
+    throw new Error("No available slot on the second day");
+  }
+  const expectedTime = timeFormatter.format(new Date(chosenSlot.start));
+  const expectedDateTime = dateTimeFormatter.format(new Date(chosenSlot.start));
+
   await page.goto("/book");
   await page.locator(`a[href="/book/${meetingTypeId}"]`).click();
   await expect(page.getByRole("heading", { name: meetingTypeTitle })).toBeVisible();
   await expect(page.getByText(timeZoneNote)).toHaveCount(1);
 
   await page.locator('ul[aria-label="Дни"] button').nth(1).click();
-  const freeSlot = page.getByRole("button", { name: /Свободно/ }).first();
-  const slotTime = await freeSlot.locator("span").first().innerText();
+  const freeSlot = page.getByRole("button", {
+    name: new RegExp(`${expectedTime}\\s*Свободно`),
+  });
+  await expect(freeSlot).toBeVisible();
   await freeSlot.click();
 
   const confirmationCard = page
     .locator('[data-slot="card"]')
     .filter({ hasText: "Подтвердите запись" });
   await expect(confirmationCard.getByText(timeZoneNote)).toBeVisible();
-  await expect(confirmationCard).toContainText(slotTime);
+  await expect(confirmationCard).toContainText(expectedDateTime);
   await expect(page.getByText(timeZoneNote)).toHaveCount(2);
 
   await page.getByRole("textbox", { name: "Имя" }).fill("Тестовый гость");
@@ -49,7 +74,7 @@ test("guest books a slot and owner sees the booking", async ({ page, request }) 
 
   const successCard = page.locator('[data-slot="card"]').filter({ hasText: "Вы записаны" });
   await expect(successCard.getByText(timeZoneNote)).toBeVisible();
-  await expect(successCard).toContainText(slotTime);
+  await expect(successCard).toContainText(expectedDateTime);
   await expect(page.getByText(timeZoneNote)).toHaveCount(1);
 
   await page.goto("/admin");
@@ -77,6 +102,7 @@ test("guest sees a conflict when the slot is taken concurrently", async ({ page,
   });
   await expect(slotButton).toBeVisible();
   await slotButton.click();
+  await expect(page.getByText(timeZoneNote)).toHaveCount(2);
 
   await page.getByRole("textbox", { name: "Имя" }).fill("Второй гость");
   await page.getByRole("textbox", { name: "Email" }).fill("second@example.com");
@@ -94,4 +120,5 @@ test("guest sees a conflict when the slot is taken concurrently", async ({ page,
   await page.getByRole("button", { name: "Подтвердить запись" }).click();
 
   await expect(page.getByRole("alert")).toContainText("уже занят");
+  await expect(page.getByText(timeZoneNote)).toHaveCount(2);
 });

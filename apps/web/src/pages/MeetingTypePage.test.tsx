@@ -1,13 +1,21 @@
 import { MemoryRouter, Route, Routes } from "react-router";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { MOSCOW_TIME_ZONE_NOTE } from "@/lib/moscow-time";
 
 import { MeetingTypePage } from "./MeetingTypePage";
 import { routes } from "../routes";
 
 const apiMocks = vi.hoisted(() => ({
   createBooking: vi.fn<() => Promise<unknown>>(),
+  meetingType: {
+    id: "intro-15",
+    title: "Встреча 15 минут",
+    description: "Короткий звонок",
+    durationMinutes: 15,
+  },
 }));
 
 vi.mock("@calendar/api-client", async (importOriginal) => {
@@ -15,12 +23,7 @@ vi.mock("@calendar/api-client", async (importOriginal) => {
   return {
     ...actual,
     getMeetingType: vi.fn<() => Promise<unknown>>().mockResolvedValue({
-      data: {
-        id: "intro-15",
-        title: "Встреча 15 минут",
-        description: "Короткий звонок",
-        durationMinutes: 15,
-      },
+      data: apiMocks.meetingType,
       error: undefined,
       response: { status: 200 },
     }),
@@ -61,7 +64,9 @@ function renderPage() {
   );
 }
 
-const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
+const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
+
+afterEach(cleanup);
 
 function getCardByTitle(title: string) {
   const card = screen.getByText(title).closest('[data-slot="card"]');
@@ -105,12 +110,7 @@ describe("MeetingTypePage", () => {
       data: {
         id: "booking-1",
         meetingTypeId: "intro-15",
-        meetingType: {
-          id: "intro-15",
-          title: "Встреча 15 минут",
-          description: "Короткий звонок",
-          durationMinutes: 15,
-        },
+        meetingType: apiMocks.meetingType,
         start: "2026-11-15T06:00:00.000Z",
         end: "2026-11-15T06:15:00.000Z",
         guestName: "Анна",

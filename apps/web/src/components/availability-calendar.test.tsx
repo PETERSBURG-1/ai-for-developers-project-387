@@ -1,6 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import type { Slot } from "@calendar/api-client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { MOSCOW_TIME_ZONE_NOTE } from "@/lib/moscow-time";
 
 import { AvailabilityCalendar } from "./availability-calendar";
 
@@ -23,12 +25,14 @@ const days = [
   },
 ];
 
-const timeZoneNote = "Время указано по Москве (МСК, UTC+3)";
+const timeZoneNote = MOSCOW_TIME_ZONE_NOTE;
 
-function renderCalendar() {
+afterEach(cleanup);
+
+function renderCalendar(calendarDays = days) {
   return render(
     <AvailabilityCalendar
-      days={days}
+      days={calendarDays}
       onSelectDate={vi.fn<(date: string) => void>()}
       onSelectSlot={vi.fn<(slot: Slot) => void>()}
       selectedDate="2026-11-15"
@@ -62,5 +66,12 @@ describe("AvailabilityCalendar", () => {
 
     const occupiedSlot = screen.getByRole("button", { name: /09:15/ });
     expect(within(occupiedSlot).queryByText(timeZoneNote)).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty-days message without the note when there are no days", () => {
+    renderCalendar([]);
+
+    expect(screen.getByText("Свободных дней пока нет.")).toBeInTheDocument();
+    expect(screen.queryByText(timeZoneNote)).not.toBeInTheDocument();
   });
 });

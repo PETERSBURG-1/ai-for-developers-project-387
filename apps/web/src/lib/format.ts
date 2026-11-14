@@ -1,18 +1,20 @@
+import { MOSCOW_TIME_ZONE } from "@/lib/moscow-time";
+
 const dayFormatter = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: "Europe/Moscow",
+  timeZone: MOSCOW_TIME_ZONE,
   weekday: "short",
   day: "numeric",
   month: "long",
 });
 
 const timeFormatter = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: "Europe/Moscow",
+  timeZone: MOSCOW_TIME_ZONE,
   hour: "2-digit",
   minute: "2-digit",
 });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
-  timeZone: "Europe/Moscow",
+  timeZone: MOSCOW_TIME_ZONE,
   day: "numeric",
   month: "long",
   hour: "2-digit",
