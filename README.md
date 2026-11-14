@@ -247,7 +247,7 @@ Playwright с включённым trace. Артефакт `playwright-<sha>` с
 
 Ежедневный Lighthouse-аудит запускает `.github/workflows/opencode-audit.yml`:
 `schedule` с cron `17 3 * * *` (06:17 МСК) и `workflow_dispatch`. Задание имеет
-`timeout-minutes: 30`; параллельные аудиты ограничены `concurrency`.
+`timeout-minutes: 20` для сбора и `30` для агента; параллельные аудиты ограничены `concurrency`.
 
 Адрес приложения задаётся repository variable `APP_URL`; журнал аудита —
 `AUDIT_LOG_ISSUE` (issue #19). Сырой Lighthouse-отчёт сохраняется artifact
