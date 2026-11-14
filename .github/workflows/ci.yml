@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install mise and project tools
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          version: "2026.11.8"
+      - name: Install dependencies
+        run: mise run setup
+      - name: Install Playwright browser
+        run: pnpm --filter @calendar/web exec playwright install --with-deps chromium
+      - name: Run all checks
+        run: mise run check
+      - name: Check generated files are committed
+        run: test -z "$(git status --porcelain)"
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build image
+        run: docker build --tag calendar:ci .
+      - name: Run container and check it serves the app
+        run: |
+          docker run --detach --name calendar --publish 10000:10000 --env PORT=10000 calendar:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:10000/api/health; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs calendar
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:10000/ | grep --quiet "Календарь звонков"
+          curl --fail --silent --show-error http://127.0.0.1:10000/book | grep --quiet "Календарь звонков"
+      - name: Stop container
+        if: always()
+        run: docker rm --force calendar
