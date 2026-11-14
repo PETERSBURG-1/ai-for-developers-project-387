@@ -4,14 +4,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-permissions:
-  contents: read
-  issues: read
-  actions: read
-  checks: read
-  statuses: read
-  pull-requests: write
-
 jobs:
   review:
     if: |
@@ -24,6 +16,13 @@ jobs:
     concurrency:
       group: opencode-review-${{ github.event.pull_request.number }}
       cancel-in-progress: true
+    permissions:
+      contents: read
+      issues: read
+      actions: read
+      checks: read
+      statuses: read
+      pull-requests: read
     steps:
       - name: Checkout PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -38,16 +37,26 @@ jobs:
           echo "HEAD_SHA=$sha" >> "$GITHUB_ENV"
           test "$sha" = "${{ github.event.pull_request.head.sha }}"
 
-      - name: Install OpenCode CLI
+      - name: Install pinned OpenCode CLI
         run: |
-          curl -fsSL https://opencode.ai/install | bash
+          set -euo pipefail
+          version="v1.19.5"
+          checksum="588310a336fa3b9df36b3f0225b26f679d453efaad0cf3d66c3651ef3ec1647a"
+          archive="${RUNNER_TEMP}/opencode-linux-x64.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/anomalyco/opencode/releases/download/${version}/opencode-linux-x64.tar.gz"
+          echo "${checksum}  ${archive}" | sha256sum --check
+          mkdir -p "$HOME/.opencode/bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          install -m 0755 "$RUNNER_TEMP/opencode" "$HOME/.opencode/bin/opencode"
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
       - name: Generate review
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"allow","gh pr comment*":"deny","gh issue comment*":"deny","git push*":"deny"},"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"allow","gh pr comment*":"deny","gh issue comment*":"deny","gh pr review*":"deny","git push*":"deny"},"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -73,14 +82,35 @@ jobs:
           cat REVIEW.md >> /tmp/review-prompt.md
           opencode run --model opencode/deepseek-v4.1-flash --agent plan --auto "$(cat /tmp/review-prompt.md)" > review.md
 
-      - name: Publish review
-        if: success()
+      - name: Upload review text
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: opencode-review
+          path: review.md
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: review
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Download review text
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p review
+          gh run download "${GITHUB_RUN_ID}" --name opencode-review --dir review
+      - name: Publish review comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ ! -s review.md ]; then
-            echo "OpenCode не вернул текст ревью" >&2
-            exit 1
-          fi
-          gh pr comment "$PR_NUMBER" --body-file review.md
+          set -euo pipefail
+          test -s review/review.md
+          gh pr comment "$PR_NUMBER" --body-file review/review.md

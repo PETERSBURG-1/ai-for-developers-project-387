@@ -46,12 +46,13 @@ jobs:
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          attempts="$(
+          previous="$(
             for event in issue_comment pull_request_review_comment; do
               gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?event=${event}&per_page=100" \
-                --jq ".workflow_runs[] | select(.display_title == \"opencode-${PR_NUMBER}\" and .conclusion != \"skipped\") | .run_attempt"
+                --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID} and .display_title == \"opencode-${PR_NUMBER}\" and .conclusion != \"skipped\") | .run_attempt"
             done | awk '{sum += $1} END {print sum + 0}'
           )"
+          attempts=$((previous + ${GITHUB_RUN_ATTEMPT:-1} - 1))
           echo "attempts=${attempts}" >> "$GITHUB_OUTPUT"
           echo "PR #${PR_NUMBER}: attempts=${attempts}, limit=3"
           if [ "$attempts" -ge 3 ]; then
@@ -97,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$RESULT" = "cancelled" ]; then
-            reason="timeout"
+            reason="timeout_or_cancelled"
           else
             reason="agent_failed"
           fi
