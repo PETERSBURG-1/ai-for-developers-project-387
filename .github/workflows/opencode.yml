@@ -17,6 +17,10 @@ permissions:
 
 jobs:
   opencode:
+    outputs:
+      limit_exhausted: ${{ steps.budget.outputs.limit_exhausted }}
+      limit_sha: ${{ steps.budget.outputs.limit_sha }}
+      limit_run_url: ${{ steps.budget.outputs.limit_run_url }}
     if: |
       github.event.comment.user.type != 'Bot' &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
@@ -56,10 +60,10 @@ jobs:
           echo "attempts=${attempts}" >> "$GITHUB_OUTPUT"
           echo "PR #${PR_NUMBER}: attempts=${attempts}, limit=3"
           if [ "$attempts" -ge 3 ]; then
-            sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
-            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            gh issue comment "$PR_NUMBER" --body "limit_exhausted: превышен лимит 3 запуска на PR. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
             echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "limit_exhausted=true" >> "$GITHUB_OUTPUT"
+            echo "limit_sha=$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
+            echo "limit_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
           else
             echo "allowed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -76,6 +80,25 @@ jobs:
           mentions: /oc,/opencode
           share: "false"
 
+  limit-report:
+    needs: opencode
+    if: needs.opencode.result == 'success' && needs.opencode.outputs.limit_exhausted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Publish limit report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          SHA: ${{ needs.opencode.outputs.limit_sha }}
+          RUN_URL: ${{ needs.opencode.outputs.limit_run_url }}
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR_NUMBER" --body "limit_exhausted: превышен лимит 3 запуска на PR. Нужен человек. Последний SHA: ${SHA}. Лог: ${RUN_URL}"
+
   report:
     needs: opencode
     if: |
@@ -87,12 +110,12 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
-      issues: write
+      pull-requests: write
     steps:
       - name: Report outcome
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
           RESULT: ${{ needs.opencode.result }}
         run: |
@@ -104,4 +127,4 @@ jobs:
           fi
           sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          gh issue comment "$PR_NUMBER" --body "${reason}: запуск агента не завершился успешно. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
+          gh pr comment "$PR_NUMBER" --body "${reason}: запуск агента не завершился успешно. Нужен человек. Последний SHA: ${sha}. Лог: ${run_url}"
