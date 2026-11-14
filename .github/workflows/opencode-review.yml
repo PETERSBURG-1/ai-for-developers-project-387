@@ -1,8 +1,12 @@
 name: opencode-review
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   review:
@@ -13,9 +17,6 @@ jobs:
        github.event.pull_request.user.login == 'opencode-agent[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    concurrency:
-      group: opencode-review-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     permissions:
       contents: read
       issues: read
@@ -24,18 +25,44 @@ jobs:
       statuses: read
       pull-requests: read
     steps:
-      - name: Checkout PR head
+      - name: Checkout base revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Record head SHA
+      - name: Build review context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          sha="$(git rev-parse HEAD)"
-          echo "HEAD_SHA=$sha" >> "$GITHUB_ENV"
-          test "$sha" = "${{ github.event.pull_request.head.sha }}"
+          set -euo pipefail
+          current_sha="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
+          test "$current_sha" = "$HEAD_SHA"
+          {
+            echo "# PR context"
+            gh pr view "$PR_NUMBER" --json number,title,body,headRefOid
+            echo
+            echo "# Diff"
+            gh pr diff "$PR_NUMBER"
+            echo
+            echo "# Checks"
+            gh pr checks "$PR_NUMBER" || true
+          } > /tmp/review-context.md
+          {
+            echo
+            echo "# Linked issue context"
+            for n in $(gh pr view "$PR_NUMBER" --json body --jq .body | grep -oE '#[0-9]+' | tr -d '#' | sort -u); do
+              echo
+              gh issue view "$n" --json number,title,body,comments,state,labels || true
+            done
+            echo
+            echo "# REVIEW.md"
+            cat REVIEW.md
+          } >> /tmp/review-context.md
 
       - name: Install pinned OpenCode CLI
         run: |
@@ -55,32 +82,23 @@ jobs:
       - name: Generate review
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: '{"edit":"deny","bash":{"*":"allow","gh pr comment*":"deny","gh issue comment*":"deny","gh pr review*":"deny","git push*":"deny"},"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          OPENCODE_PERMISSION: '{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny","external_directory":"deny"}'
         run: |
-          cat > /tmp/review-prompt.md <<PROMPT
-          Ты независимый ревьюер PR #${PR_NUMBER} в репозитории ${GITHUB_REPOSITORY}.
-          Проверяемый head SHA: ${HEAD_SHA}.
+          cat > /tmp/review-prompt.md <<'PROMPT'
+          Ты независимый ревьюер PR. Тебе передан контекст ниже: описание PR, diff,
+          статусы CI, связанные issues и REVIEW.md.
 
-          Прочитай:
-          - описание PR: gh pr view ${PR_NUMBER} --json title,body,headRefOid
-          - diff: gh pr diff ${PR_NUMBER}
-          - статусы CI: gh pr checks ${PR_NUMBER} (если команда возвращает ненулевой код, зафиксируй статусы)
-          - спецификацию, тикеты и комментарий согласования по ссылкам из описания PR
-          - критерии ниже.
-
-          Не меняй файлы, не делай commit/push и не публикуй комментарий — это сделает отдельный шаг после тебя.
+          Не меняй файлы, не выполняй команды и не публикуй комментарий: это сделает
+          отдельный шаг после тебя.
           Оценивай риск по последствиям ошибки, а не по числу изменённых строк.
-          Для каждого подтверждённого дефекта укажи файл, строку, условие ошибки и последствие.
-          Если подтверждённых дефектов нет, скажи об этом прямо. Не дублируй вывод линтера.
-
-          ## REVIEW.md
+          Для каждого подтверждённого дефекта укажи файл, строку, условие ошибки и
+          последствие. Если подтверждённых дефектов нет, скажи об этом прямо.
+          Не дублируй вывод линтера. Сверь результат со спецификацией и
+          согласованием человека из контекста.
 
           PROMPT
-          cat REVIEW.md >> /tmp/review-prompt.md
-          opencode run --model opencode/deepseek-v4.1-flash --agent plan --auto "$(cat /tmp/review-prompt.md)" > review.md
+          cat /tmp/review-context.md >> /tmp/review-prompt.md
+          opencode run --model opencode/deepseek-v4.1-flash --agent plan "$(cat /tmp/review-prompt.md)" > review.md
 
       - name: Upload review text
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

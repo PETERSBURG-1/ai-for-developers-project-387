@@ -218,10 +218,13 @@ GitHub Secrets под именем `OPENCODE_API_KEY`.
 публикует результат через `gh pr comment`.
 
 Критерии ревью лежат в `REVIEW.md` и передаются агенту в prompt. Агент читает
-описание PR, спецификацию, тикеты, согласование, diff и статусы CI. Права:
-`contents: read`, `issues: read`, `actions: read`, `checks: read`,
-`statuses: read`, `pull-requests: write`. Таймаут — 20 минут, concurrency
-отменяет устаревшее ревью того же PR. Авторевью не меняет код.
+описание PR, спецификацию, тикеты, согласование, diff и статусы CI. Определение
+workflow и `REVIEW.md` берутся из base; код PR не исполняется, diff читается
+через `gh`. Агент ревью работает с read-only токеном: `contents: read`,
+`issues: read`, `actions: read`, `checks: read`, `statuses: read`,
+`pull-requests: read`. Публикация — отдельное задание с `pull-requests: write`.
+Таймаут — 20 минут, concurrency отменяет устаревшее ревью того же PR.
+Авторевью не меняет код.
 
 ### Бюджет запусков на PR
 
