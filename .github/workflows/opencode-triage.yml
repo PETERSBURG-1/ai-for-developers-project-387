@@ -1,0 +1,58 @@
+name: opencode-triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+jobs:
+  opencode-triage:
+    if: |
+      github.event.issue.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association) &&
+      !contains(github.event.issue.labels.*.name, 'ready-for-agent') &&
+      !contains(github.event.issue.labels.*.name, 'wayfinder:task')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: opencode-triage-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Expose project skills
+        run: |
+          mkdir -p .opencode
+          cp -R .agents/skills .opencode/skills
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: '{"external_directory":{"/tmp/*":"allow","/tmp/**":"allow"}}'
+        with:
+          model: opencode/deepseek-v4.1-flash
+          share: "false"
+          prompt: |
+            Это автоматический разбор нового обращения #${{ github.event.issue.number }}.
+
+            Прочитай issue и все комментарии. Работай по скиллу triage.
+            1. Прочитай docs/agents/issue-tracker.md, docs/agents/triage-labels.md и AGENTS.md.
+            2. Проверь, что уже умеет приложение. Не предлагай уже реализованное.
+            3. Примени одну категорию (bug/enhancement) и одно состояние
+               (needs-triage/needs-info/ready-for-agent/ready-for-human/wontfix).
+               Если данных не хватает — поставь needs-info и задай конкретные вопросы.
+               Если данных достаточно — оставь краткий agent brief.
+            4. Не создавай спецификацию и тикеты, не меняй код и не открывай PR.
+            5. Issues с метками ready-for-agent и wayfinder:task уже подготовлены;
+               не разбирай их повторно.
+            6. Ответ оставь комментарием с дисклеймером triage.
