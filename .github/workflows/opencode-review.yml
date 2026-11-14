@@ -98,7 +98,8 @@ jobs:
 
           PROMPT
           cat /tmp/review-context.md >> /tmp/review-prompt.md
-          opencode run --model opencode/deepseek-v4.1-flash --agent plan "$(cat /tmp/review-prompt.md)" > review.md
+          opencode run --model opencode/deepseek-v4.1-flash --agent plan --auto "$(cat /tmp/review-prompt.md)" > review.md
+          test -s review.md
 
       - name: Upload review text
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
