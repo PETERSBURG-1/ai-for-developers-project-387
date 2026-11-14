@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { MOSCOW_TIME_ZONE } from "../src/lib/moscow-time.ts";
+const MOSCOW_TIME_ZONE = "Europe/Moscow";
 
 const meetingTypeId = `e2e-${Date.now()}`;
 const meetingTypeTitle = "E2E встреча";
